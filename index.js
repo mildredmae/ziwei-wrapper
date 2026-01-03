@@ -1,11 +1,53 @@
+// 🪶 Ziwei Wrapper — Local, Jisu-Free Edition
 import express from "express";
-import fetch from "node-fetch";
 
 const app = express();
 app.use(express.json());
 
-// Main endpoint
-app.get("/api/ziwei", async (req, res) => {
+// 12 Zi Wei palaces in English
+const PALACES = [
+  "Life Palace",
+  "Siblings Palace",
+  "Marriage Palace",
+  "Children Palace",
+  "Wealth Palace",
+  "Health Palace",
+  "Travel Palace",
+  "Friends Palace",
+  "Career Palace",
+  "Property Palace",
+  "Fortune Palace",
+  "Parents Palace",
+];
+
+// Basic placeholder star data — you can later replace this
+// with real calculated results from a Zi Wei or BaZi engine
+const STAR_LIBRARY = {
+  major: [
+    "Zi Wei", "Tian Ji", "Tai Yang", "Wu Qu", "Tian Tong",
+    "Lian Zhen", "Tian Fu", "Tai Yin", "Tan Lang", "Ju Men",
+    "Tian Xiang", "Tian Liang", "Qi Sha", "Po Jun"
+  ],
+  minor: [
+    "Tian Kui", "Tian Yue", "Zuo Fu", "You Bi", "Wen Chang",
+    "Wen Qu", "Huo Xing", "Ling Xing", "Tian Ma"
+  ]
+};
+
+// Helper to pseudo-randomly assign stars for mock data
+function assignStars(seed = 0) {
+  const pseudoRandom = (n) => Math.abs(Math.sin(seed + n)) % 1;
+  return PALACES.map((name, i) => {
+    const major = STAR_LIBRARY.major
+      .filter((_, idx) => pseudoRandom(i * 10 + idx) > 0.85);
+    const minor = STAR_LIBRARY.minor
+      .filter((_, idx) => pseudoRandom(i * 100 + idx) > 0.92);
+    return { name, majorStars: major, minorStars: minor };
+  });
+}
+
+// Main Zi Wei endpoint
+app.get("/api/ziwei", (req, res) => {
   try {
     const { year, month, day, hour, gender } = req.query;
 
@@ -13,50 +55,34 @@ app.get("/api/ziwei", async (req, res) => {
       return res.status(400).json({ error: "Missing required parameters" });
     }
 
-    const sex = gender.toLowerCase() === "male" ? 1 : 0;
+    // For now we just create a deterministic seed from birth data
+    const seed =
+      parseInt(year) * 10000 +
+      parseInt(month) * 100 +
+      parseInt(day) +
+      (gender.toLowerCase() === "male" ? 1 : 2) * parseInt(hour);
 
-    const url = `https://api.jisuapi.com/ziwei/ziwei?appkey=${process.env.JISU_KEY}&year=${year}&month=${month}&day=${day}&hour=${hour}&sex=${sex}`;
+    const palaces = assignStars(seed);
 
-    const response = await fetch(url);
-    const data = await response.json();
-
-    // If JisuAPI returned data successfully
-    if (data.status === 0 && data.result) {
-      const translation = {
-        "命宫": "Life Palace",
-        "兄弟宫": "Siblings Palace",
-        "夫妻宫": "Marriage Palace",
-        "子女宫": "Children Palace",
-        "财帛宫": "Wealth Palace",
-        "疾厄宫": "Health Palace",
-        "迁移宫": "Travel Palace",
-        "仆役宫": "Friends Palace",
-        "官禄宫": "Career Palace",
-        "田宅宫": "Property Palace",
-        "福德宫": "Fortune Palace",
-        "父母宫": "Parents Palace"
-      };
-
-      const palaces = (data.result.palaces || []).map(p => ({
-        name: translation[p.name] || p.name,
-        majorStars: p.major_stars || [],
-        minorStars: p.minor_stars || [],
-      }));
-
-      return res.json({ palaces });
-    }
-
-    res.status(500).json({ error: "Invalid response from JisuAPI", details: data });
+    res.json({
+      meta: {
+        system: "Zi Wei Dou Shu (local mock)",
+        note: "Replace this logic with true Zi Wei calculations later",
+        birthData: { year, month, day, hour, gender },
+      },
+      palaces,
+    });
   } catch (err) {
-    console.error("🔥 Error fetching Ziwei chart:", err);
-    res.status(500).json({ error: "Ziwei chart fetch failed." });
+    console.error("🔥 Error generating Ziwei chart:", err);
+    res.status(500).json({ error: "Ziwei chart generation failed." });
   }
 });
 
-// Health check route
+// Health check
 app.get("/", (_, res) =>
-  res.send("🪶 Ziwei Dou Shu Wrapper alive — use /api/ziwei")
+  res.send("🪶 Ziwei Dou Shu Wrapper alive — use /api/ziwei?year=YYYY&month=M&day=D&hour=H&gender=male")
 );
 
+// Render / local hosting
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✨ Ziwei Wrapper running on port ${PORT}`));
