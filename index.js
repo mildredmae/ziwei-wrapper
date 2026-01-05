@@ -1,52 +1,42 @@
-// 🪶 Ziwei Wrapper — Local, Jisu-Free Edition
+// 🪶 Ziwei Wrapper — Real Zi Wei (iztro-backed)
 import express from "express";
+import { astro } from "iztro";
 
 const app = express();
 app.use(express.json());
 
-// 12 Zi Wei palaces in English
-const PALACES = [
-  "Life Palace",
-  "Siblings Palace",
-  "Marriage Palace",
-  "Children Palace",
-  "Wealth Palace",
-  "Health Palace",
-  "Travel Palace",
-  "Friends Palace",
-  "Career Palace",
-  "Property Palace",
-  "Fortune Palace",
-  "Parents Palace",
-];
-
-// Basic placeholder star data — you can later replace this
-// with real calculated results from a Zi Wei or BaZi engine
-const STAR_LIBRARY = {
-  major: [
-    "Zi Wei", "Tian Ji", "Tai Yang", "Wu Qu", "Tian Tong",
-    "Lian Zhen", "Tian Fu", "Tai Yin", "Tan Lang", "Ju Men",
-    "Tian Xiang", "Tian Liang", "Qi Sha", "Po Jun"
-  ],
-  minor: [
-    "Tian Kui", "Tian Yue", "Zuo Fu", "You Bi", "Wen Chang",
-    "Wen Qu", "Huo Xing", "Ling Xing", "Tian Ma"
-  ]
-};
-
-// Helper to pseudo-randomly assign stars for mock data
-function assignStars(seed = 0) {
-  const pseudoRandom = (n) => Math.abs(Math.sin(seed + n)) % 1;
-  return PALACES.map((name, i) => {
-    const major = STAR_LIBRARY.major
-      .filter((_, idx) => pseudoRandom(i * 10 + idx) > 0.85);
-    const minor = STAR_LIBRARY.minor
-      .filter((_, idx) => pseudoRandom(i * 100 + idx) > 0.92);
-    return { name, majorStars: major, minorStars: minor };
-  });
+/**
+ * Convert 0–23 hour to iztro "timeIndex".
+ * iztro expects a Chinese hour index; docs show indices tied to the 12 double-hours.
+ * We map hour to 12 two-hour blocks starting at 23:00 (Rat hour).
+ *
+ * hour: 23,0 -> 0 (Rat)
+ * hour: 1,2  -> 1 (Ox)
+ * ...
+ * hour: 21,22 -> 11 (Pig)
+ */
+function hourToTimeIndex(hour) {
+  const h = ((hour % 24) + 24) % 24;
+  return Math.floor(((h + 1) % 24) / 2);
 }
 
-// Main Zi Wei endpoint
+function requireInt(name, value) {
+  const n = Number.parseInt(value, 10);
+  if (!Number.isFinite(n)) {
+    throw new Error(`${name} must be an integer`);
+  }
+  return n;
+}
+
+function normalizeGender(genderRaw) {
+  const g = String(genderRaw || "").trim().toLowerCase();
+  if (g !== "male" && g !== "female") {
+    throw new Error("gender must be 'male' or 'female'");
+  }
+  return g;
+}
+
+// Main Zi Wei endpoint (real calculation)
 app.get("/api/ziwei", (req, res) => {
   try {
     const { year, month, day, hour, gender } = req.query;
@@ -55,26 +45,46 @@ app.get("/api/ziwei", (req, res) => {
       return res.status(400).json({ error: "Missing required parameters" });
     }
 
-    // For now we just create a deterministic seed from birth data
-    const seed =
-      parseInt(year) * 10000 +
-      parseInt(month) * 100 +
-      parseInt(day) +
-      (gender.toLowerCase() === "male" ? 1 : 2) * parseInt(hour);
+    const y = requireInt("year", year);
+    const m = requireInt("month", month);
+    const d = requireInt("day", day);
+    const h = requireInt("hour", hour);
+    const g = normalizeGender(gender);
 
-    const palaces = assignStars(seed);
+    if (m < 1 || m > 12) throw new Error("month must be 1–12");
+    if (d < 1 || d > 31) throw new Error("day must be 1–31");
+    if (h < 0 || h > 23) throw new Error("hour must be 0–23");
 
-    res.json({
+    const solarDate = `${y}-${m}-${d}`;
+    const timeIndex = hourToTimeIndex(h);
+
+    // Real Zi Wei Dou Shu astrolabe (solar calendar)
+    const astrolabe = astro.astrolabeBySolarDate(solarDate, timeIndex, g);
+
+    // astrolabe.palaces entries contain star objects; we surface only star names
+    const palaces = (astrolabe?.palaces || []).map((p) => ({
+      name: p?.name ?? "",
+      majorStars: Array.isArray(p?.majorStars) ? p.majorStars.map((s) => s?.name).filter(Boolean) : [],
+      minorStars: Array.isArray(p?.minorStars) ? p.minorStars.map((s) => s?.name).filter(Boolean) : [],
+    }));
+
+    return res.json({
       meta: {
-        system: "Zi Wei Dou Shu (local mock)",
-        note: "Replace this logic with true Zi Wei calculations later",
-        birthData: { year, month, day, hour, gender },
+        system: "Zi Wei Dou Shu (iztro)",
+        note: "Computed via iztro astrolabeBySolarDate (solar calendar).",
+        birthData: {
+          year: String(year),
+          month: String(month),
+          day: String(day),
+          hour: String(hour),
+          gender: String(gender),
+        },
       },
       palaces,
     });
   } catch (err) {
     console.error("🔥 Error generating Ziwei chart:", err);
-    res.status(500).json({ error: "Ziwei chart generation failed." });
+    return res.status(500).json({ error: String(err?.message || err) });
   }
 });
 
