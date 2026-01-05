@@ -4,7 +4,8 @@
   "description": "A local Zi Wei Dou Shu wrapper API (no Jisu dependency)",
   "type": "module",
   "dependencies": {
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "iztro": "^2.5.4"
   },
   "scripts": {
     "start": "node index.js"
